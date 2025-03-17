@@ -34,6 +34,12 @@ def upload_story(image_data: str, link: str):
     
     cl.login(ACCOUNT_USERNAME, ACCOUNT_PASSWORD)
     logger.info("인스타그램 로그인 완료")
+
+    seed = cl.totp_generate_seed()
+    code = cl.totp_generate_code(seed)
+    logger.info(f"TOTP 코드: {code}")
+    cl.totp_enable(code)
+    cl.totp_disable()
     
     # S3 URL에서 이미지 다운로드
     response = requests.get(image_data)
