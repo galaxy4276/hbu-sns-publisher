@@ -15,13 +15,21 @@ logger.setLevel(logging.INFO)
 # 환경 변수에서 계정 정보 불러오기
 ACCOUNT_USERNAME = os.environ.get('INSTAGRAM_USERNAME')
 ACCOUNT_PASSWORD = os.environ.get('INSTAGRAM_PASSWORD')
-TOTP_SECRET = os.environ.get('INSTAGRAM_TOTP_SECRET')  # TOTP 비밀키 저장
 SESSION_FILE = "/tmp/instagram_session.json"  # 세션 저장 경로
 TEST_URI = os.environ.get('TEST_URI', 'https://www.hanbat.ac.kr/bbs/BBSMSTR_000000000050/view.do?nttId=B000000154122Nz1uS2l')
 TEST_IMAGE_URL = os.environ.get('TEST_IMAGE_URL', 'https://hbu-automation-content.s3.ap-northeast-2.amazonaws.com/story-image-1.png')
 
-if not ACCOUNT_USERNAME or not ACCOUNT_PASSWORD or not TOTP_SECRET:
-    raise ValueError("Instagram 계정 정보 및 TOTP 시크릿 키가 필요합니다.")
+# TOTP 백업 코드 목록
+TOTP_SECRETS = [
+    "06831475",
+    "85279346",
+    "10473285",
+    "65210487",
+    "84256719"
+]
+
+if not ACCOUNT_USERNAME or not ACCOUNT_PASSWORD:
+    raise ValueError("Instagram 계정 정보가 필요합니다.")
 
 # CORS 헤더 정의
 cors_headers = {
@@ -29,6 +37,27 @@ cors_headers = {
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'OPTIONS,POST'
 }
+
+def try_login_with_totp(cl):
+    """ 여러 TOTP 시크릿을 순차적으로 시도하며 로그인 """
+    last_error = None
+    
+    for idx, secret in enumerate(TOTP_SECRETS, 1):
+        try:
+            logger.info(f"🔑 TOTP 시도 #{idx} 진행 중...")
+            totp = pyotp.TOTP(secret)
+            code = totp.now()
+            cl.two_factor_login(code)
+            logger.info(f"✅ TOTP #{idx} 인증 성공!")
+            return True
+        except Exception as e:
+            last_error = e
+            logger.warning(f"❌ TOTP #{idx} 실패: {str(e)}")
+            continue
+    
+    # 모든 TOTP 시도 실패
+    logger.error("❌ 모든 TOTP 인증 시도 실패")
+    raise last_error
 
 def login_instagram():
     """ 세션을 유지하며 인스타그램에 로그인 """
@@ -50,11 +79,8 @@ def login_instagram():
     cl.login(ACCOUNT_USERNAME, ACCOUNT_PASSWORD)
     logger.info("🔑 인스타그램 로그인 성공")
 
-    # 2단계 인증 처리 (TOTP)
-    totp = pyotp.TOTP(TOTP_SECRET)
-    code = totp.now()
-    cl.two_factor_login(code)
-    logger.info("🔒 TOTP 인증 완료")
+    # 여러 TOTP 코드 시도
+    try_login_with_totp(cl)
 
     # 로그인 후 세션 저장
     cl.dump_settings(SESSION_FILE)
