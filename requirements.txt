@@ -1,4 +1,5 @@
-instagrapi
+instagrapi==2.0.0
 moviepy==1.0.3
-requests
+requests==2.31.0
 python-multipart
+pyotp==2.9.0
